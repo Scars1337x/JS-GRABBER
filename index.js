@@ -1,3 +1,5 @@
+
+// Code is shit
 var glob = require("glob");
 const fs = require('fs');
 const https = require('https');
@@ -99,4 +101,3 @@ function pwnBetterDiscord() {
     }
 
 }
-
